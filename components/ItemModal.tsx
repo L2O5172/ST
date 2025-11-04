@@ -195,6 +195,9 @@ const ItemModal: React.FC<ItemModalProps> = ({ selectedItem, editingItem, addons
     if (item.customizations?.drinkChoice && allocatedDrinkCount !== quantity) {
       errors.push(`飲料：請選擇所有 ${quantity} 份餐點的飲料。`);
     }
+    if (item.customizations?.sauceChoice && totalSauceCount !== totalSauceLimit) {
+      errors.push(`主菜沾醬：請為 ${quantity} 份餐點選擇共 ${totalSauceLimit} 份沾醬。`);
+    }
     if (item.customizations?.multiChoice && allocatedMultiChoiceCount !== quantity) {
       errors.push(`${item.customizations.multiChoice.title}：請為 ${quantity} 份餐點分配選項。`);
     }
@@ -349,8 +352,8 @@ const ItemModal: React.FC<ItemModalProps> = ({ selectedItem, editingItem, addons
           {item.customizations?.sauceChoice && (
             <div>
               <div className="flex justify-between items-baseline mb-3">
-                <h3 className="text-lg font-semibold text-slate-700">主菜沾醬 (每份選{saucesPerItem})</h3>
-                <span className={`font-semibold ${totalSauceCount === totalSauceLimit ? 'text-green-600' : 'text-slate-500'}`}>已選 {totalSauceCount} / {totalSauceLimit}</span>
+                <h3 className="text-lg font-semibold text-slate-700">主菜沾醬 (每份選{saucesPerItem})*</h3>
+                <span className={`font-semibold ${totalSauceCount === totalSauceLimit ? 'text-green-600' : 'text-red-500'}`}>已選 {totalSauceCount} / {totalSauceLimit}</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {SAUCE_CHOICES.map(sauce => (
@@ -372,7 +375,7 @@ const ItemModal: React.FC<ItemModalProps> = ({ selectedItem, editingItem, addons
                 <div className="space-y-4">
                     <div>
                         <div className="flex justify-between items-baseline mb-2 pl-2">
-                            <h4 className="text-md font-semibold text-slate-600">A區 - 任選一種↓</h4>
+                            <h4 className="text-md font-semibold text-slate-600">A區 - 任選一種↓*</h4>
                             {isDessertSelectionItem && <span className={`font-semibold ${totalDessertGroupA === quantity ? 'text-green-600' : 'text-red-500'}`}>已選 {totalDessertGroupA} / {quantity}</span>}
                         </div>
                         <div className="grid grid-cols-1 gap-3">
@@ -390,7 +393,7 @@ const ItemModal: React.FC<ItemModalProps> = ({ selectedItem, editingItem, addons
                     </div>
                     <div>
                         <div className="flex justify-between items-baseline mb-2 pl-2">
-                            <h4 className="text-md font-semibold text-slate-600">B區 - 任選一種↓</h4>
+                            <h4 className="text-md font-semibold text-slate-600">B區 - 任選一種↓*</h4>
                             {isDessertSelectionItem && <span className={`font-semibold ${totalDessertGroupB === quantity ? 'text-green-600' : 'text-red-500'}`}>已選 {totalDessertGroupB} / {quantity}</span>}
                         </div>
                          <div className="grid grid-cols-1 gap-3">
