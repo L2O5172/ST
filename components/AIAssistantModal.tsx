@@ -37,7 +37,16 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    // FIX: Memoize the AI instance and handle missing API key gracefully to prevent crashes.
+    const ai = useMemo(() => {
+        try {
+            // The environment should provide this key. If not, the constructor will throw an error.
+            return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+        } catch (e) {
+            console.error("Failed to initialize GoogleGenAI:", e);
+            return null; // Return null if initialization fails.
+        }
+    }, []);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,6 +76,15 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
         setMessages(prev => [...prev, newUserMessage]);
         setUserInput('');
         setIsLoading(true);
+        
+        // FIX: Check if AI instance was successfully created.
+        if (!ai) {
+            const errorMessage = "AI 小幫手目前無法使用，請確認 API 金鑰是否已正確設定。";
+            setError(errorMessage);
+            setMessages(prev => [...prev, { role: 'model', content: errorMessage }]);
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const response = await ai.models.generateContent({
@@ -87,7 +105,7 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
         } finally {
             setIsLoading(false);
         }
-    }, [userInput, isLoading, menuContext, ai.models]);
+    }, [userInput, isLoading, menuContext, ai]);
     
     if (!isOpen) return null;
 
@@ -135,7 +153,7 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
                             className="flex-grow p-3 border border-slate-300 rounded-full focus:ring-2 focus:ring-blue-500 outline-none"
                             disabled={isLoading}
                         />
-                        <button type="submit" disabled={isLoading || !userInput.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors">
+                        <button type="submit" disabled={isLoading || !userInput.trim() || !ai} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors">
                             <SendIcon className="h-6 w-6" />
                         </button>
                     </form>
