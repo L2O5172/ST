@@ -39,12 +39,18 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
 
     // FIX: Memoize the AI instance and handle missing API key gracefully to prevent crashes.
     const ai = useMemo(() => {
+        const apiKey = process.env.API_KEY;
+        // Pre-emptively check for the API key. If it's missing, don't even try to initialize.
+        // This is the primary fix for the Vercel "blank screen" crash.
+        if (!apiKey) {
+            console.warn("Google GenAI API Key is not configured. AI Assistant will be disabled.");
+            return null;
+        }
         try {
-            // The environment should provide this key. If not, the constructor will throw an error.
-            return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            return new GoogleGenAI({ apiKey: apiKey });
         } catch (e) {
             console.error("Failed to initialize GoogleGenAI:", e);
-            return null; // Return null if initialization fails.
+            return null; // Return null if initialization fails for any other reason.
         }
     }, []);
 
