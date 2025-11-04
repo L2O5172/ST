@@ -3,7 +3,7 @@ import { MENU_DATA, ADDONS } from '../constants';
 
 // --- IMPORTANT ---
 // Replace this with your actual Google Apps Script Web App URL
-const API_URL = 'https://script.google.com/macros/s/AKfycbxr4l4N3rRgm0d8BqzEJr_OIhpuaJ2WnH_u3o1wjX3fHzV4lt5SDZ8y9Sn8qP42pCfJ/exec'; 
+const API_URL = 'https://script.google.com/macros/s/AKfycbxiZ4gI7Vd1ikaC1e1ijOW3YWQTtaUSQelFuh20FTOLtvXsPU6o_c07GZ7FaFA07_Y/exec'; 
 
 const apiService = {
   async getMenuAndAddons(): Promise<{ menu: MenuCategory[], addons: Addon[], from: 'api' | 'fallback' }> {
