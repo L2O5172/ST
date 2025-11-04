@@ -2,7 +2,7 @@ import React from 'react';
 import type { Order, CartItem, OrderData } from '../types';
 
 type PrintableOrderProps = {
-    order: Order | OrderData;
+    order: Order | OrderData | null;
     orderId?: string | null;
 };
 
@@ -24,6 +24,10 @@ const renderOrderItem = (item: CartItem) => (
 
 
 export const PrintableOrder: React.FC<PrintableOrderProps> = ({ order, orderId }) => {
+    if (!order) {
+        return null; // Safety check to prevent crashing if order data is missing.
+    }
+    
     const finalOrderId = 'id' in order ? order.id : orderId;
     
     return (
