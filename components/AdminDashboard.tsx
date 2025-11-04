@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Order, OrderStatus, CartItem, SalesStatistics } from '../types';
 import { apiService } from '../services/apiService';
 import { CloseIcon } from './icons';
+import { PrintableOrder } from './PrintableOrder';
 
 const getStatusColor = (status: OrderStatus) => {
     switch (status) {
@@ -66,7 +67,7 @@ const OrderDetailModal: React.FC<{ order: Order; onClose: () => void }> = ({ ord
 };
 
 
-const OrderManagementView: React.FC<{ orders: Order[], onUpdateStatus: (id: string, status: OrderStatus) => void, onPrint: (order: Order) => void, onViewOrder: (order: Order) => void }> = ({ orders, onUpdateStatus, onPrint, onViewOrder }) => {
+const OrderManagementView: React.FC<{ orders: Order[], onUpdateStatus: (id: string, status: OrderStatus) => void, onPrintRequest: (content: React.ReactNode) => void, onViewOrder: (order: Order) => void }> = ({ orders, onUpdateStatus, onPrintRequest, onViewOrder }) => {
     const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
     
     const statusCounts = useMemo(() => {
@@ -147,7 +148,7 @@ const OrderManagementView: React.FC<{ orders: Order[], onUpdateStatus: (id: stri
                                         <select value={order.status} onChange={(e) => onUpdateStatus(order.id, e.target.value as OrderStatus)} className="p-1 border rounded-md text-xs bg-white focus:ring-green-500 focus:border-green-500">
                                             {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
-                                        <button onClick={() => onPrint(order)} className="text-xs bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600">列印</button>
+                                        <button onClick={() => onPrintRequest(<PrintableOrder order={order} />)} className="text-xs bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600">列印</button>
                                     </td>
                                 </tr>
                             ))}
@@ -238,14 +239,14 @@ const SalesStatisticsView: React.FC = () => {
 interface AdminDashboardProps {
   isOpen: boolean;
   onClose: () => void;
+  onPrintRequest: (content: React.ReactNode) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose, onPrintRequest }) => {
     const [view, setView] = useState<'orders' | 'stats'>('orders');
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string|null>(null);
-    const [printOrder, setPrintOrder] = useState<Order | null>(null);
     const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
 
     const fetchData = useCallback(async () => {
@@ -265,25 +266,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
             fetchData();
         }
     }, [isOpen, fetchData]);
-    
-    useEffect(() => {
-        if (printOrder) {
-            const handleAfterPrint = () => {
-                setPrintOrder(null);
-            };
-
-            window.addEventListener('afterprint', handleAfterPrint);
-            
-            const timer = setTimeout(() => {
-                window.print();
-            }, 100);
-
-            return () => {
-                clearTimeout(timer);
-                window.removeEventListener('afterprint', handleAfterPrint);
-            };
-        }
-    }, [printOrder]);
 
     const handleUpdateStatus = async (id: string, status: OrderStatus) => {
         const originalOrders = [...orders];
@@ -316,40 +298,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     <main className="flex-grow overflow-y-auto">
                         {isLoading && <div className="p-8 text-center">載入中...</div>}
                         {error && <div className="p-8 text-center text-red-500">{error}</div>}
-                        {!isLoading && !error && view === 'orders' && <OrderManagementView orders={orders} onUpdateStatus={handleUpdateStatus} onPrint={setPrintOrder} onViewOrder={setViewingOrder} />}
+                        {!isLoading && !error && view === 'orders' && <OrderManagementView orders={orders} onUpdateStatus={handleUpdateStatus} onPrintRequest={onPrintRequest} onViewOrder={setViewingOrder} />}
                         {!isLoading && !error && view === 'stats' && <SalesStatisticsView />}
                     </main>
                 </div>
-            </div>
-            <div className="print-area">
-                {printOrder && (
-                    <div className="p-4 bg-white">
-                        <h3 className="text-lg font-bold text-center mb-2">訂單明細</h3>
-                        <p><strong>訂單號:</strong> {printOrder.id}</p>
-                        <p><strong>顧客:</strong> {printOrder.customerInfo.name}</p>
-                        <p><strong>類型:</strong> {printOrder.orderType} {printOrder.customerInfo.tableNumber && `(${printOrder.customerInfo.tableNumber}桌)`}</p>
-                        <hr className="my-2" />
-                        <ul className="text-sm">
-                            {printOrder.items.map(item => (
-                                <li key={item.cartId} className="mb-2">
-                                    <p className="font-semibold">{item.item.name} (${item.item.price}) x{item.quantity}</p>
-                                    <div className="text-xs text-slate-500 pl-2 mt-1 space-y-0.5">
-                                        {item.selectedDonenesses && Object.keys(item.selectedDonenesses).length > 0 && <p>熟度: {Object.entries(item.selectedDonenesses).map(([d, q]) => `${d}x${q}`).join(', ')}</p>}
-                                        {item.selectedMultiChoice && Object.keys(item.selectedMultiChoice).length > 0 && <p>口味: {Object.entries(item.selectedMultiChoice).map(([d, q]) => `${d}x${q}`).join(', ')}</p>}
-                                        {item.selectedDrinks && Object.keys(item.selectedDrinks).length > 0 && <p>飲料: {Object.entries(item.selectedDrinks).map(([d, q]) => `${d}x${q}`).join(', ')}</p>}
-                                        {item.selectedSauces && item.selectedSauces.length > 0 && <p>醬料: {item.selectedSauces.map(s => `${s.name}x${s.quantity}`).join(', ')}</p>}
-                                        {item.selectedDesserts && item.selectedDesserts.length > 0 && <p>甜品: {item.selectedDesserts.map(d => `${d.name}x${d.quantity}`).join(', ')}</p>}
-                                        {item.selectedSingleChoiceAddon && <p>單點加購: {item.selectedSingleChoiceAddon}</p>}
-                                        {item.selectedAddons && item.selectedAddons.length > 0 && <p>其他加購: {item.selectedAddons.map(a => `${a.name} ($${a.price}) x${a.quantity}`).join(', ')}</p>}
-                                        {item.selectedNotes && <p>備註: {item.selectedNotes}</p>}
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                        <hr className="my-2" />
-                        <p className="text-right font-bold text-lg">總計: ${printOrder.totalPrice}</p>
-                    </div>
-                )}
             </div>
             {viewingOrder && <OrderDetailModal order={viewingOrder} onClose={() => setViewingOrder(null)} />}
         </>
