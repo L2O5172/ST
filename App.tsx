@@ -21,7 +21,7 @@ const App: React.FC = () => {
     const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
     const [isEditingFromCart, setIsEditingFromCart] = useState(false);
     const [confirmationData, setConfirmationData] = useState<{ orderId: string; orderData: OrderData } | null>(null);
-    const [printContent, setPrintContent] = useState<React.ReactNode | null>(null);
+
 
     const [menuData, setMenuData] = useState<MenuCategory[]>([]);
     const [addons, setAddons] = useState<Addon[]>([]);
@@ -45,31 +45,6 @@ const App: React.FC = () => {
             }
         }
     }, []);
-    
-    // Centralized Printing Logic
-    useEffect(() => {
-        if (printContent) {
-            const handleAfterPrint = () => {
-                setPrintContent(null);
-            };
-
-            window.addEventListener('afterprint', handleAfterPrint, { once: true });
-            
-            const timer = setTimeout(() => {
-                window.print();
-            }, 100); 
-
-            return () => {
-                clearTimeout(timer);
-                window.removeEventListener('afterprint', handleAfterPrint);
-            };
-        }
-    }, [printContent]);
-
-    const handlePrintRequest = (content: React.ReactNode) => {
-        setPrintContent(content);
-    };
-
 
     useEffect(() => {
         const initialLoad = async () => {
@@ -237,114 +212,107 @@ const App: React.FC = () => {
     }
 
     return (
-        <>
-            <div className="print-area">
-              {printContent}
-            </div>
-            <div className="min-h-screen bg-slate-100 text-slate-800">
-                 {notification && (
-                    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
-                        <p className="font-bold">{notification}</p>
+        <div className="min-h-screen bg-slate-100 text-slate-800">
+             {notification && (
+                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
+                    <p className="font-bold">{notification}</p>
+                </div>
+            )}
+            <header className="bg-white shadow-md sticky top-0 z-20">
+                <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setIsAdminDashboardOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                            <span>管理後台</span>
+                        </button>
+                        <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                            <SearchIcon className="h-4 w-4"/>
+                            <span>查詢訂單</span>
+                        </button>
+                        <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
+                            <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
+                            <span>{isRefreshing ? '刷新中' : '刷新'}</span>
+                        </button>
                     </div>
-                )}
-                <header className="bg-white shadow-md sticky top-0 z-20">
-                    <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                        <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setIsAdminDashboardOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
-                                <span>管理後台</span>
-                            </button>
-                            <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
-                                <SearchIcon className="h-4 w-4"/>
-                                <span>查詢訂單</span>
-                            </button>
-                            <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
-                                <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
-                                <span>{isRefreshing ? '刷新中' : '刷新'}</span>
-                            </button>
-                        </div>
-                    </div>
-                </header>
+                </div>
+            </header>
 
-                <main className="container mx-auto p-4 md:p-6 lg:p-8">
-                    <Menu menuData={menuData} onSelectItem={handleSelectItem} />
-                </main>
+            <main className="container mx-auto p-4 md:p-6 lg:p-8">
+                <Menu menuData={menuData} onSelectItem={handleSelectItem} />
+            </main>
 
-                <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
-                    <div className="border-t border-slate-200 pt-8 space-y-2">
-                        <p>＊店內最低消費為一份餐點</p>
-                        <p>＊不收服務費，用完餐請回收餐具</p>
-                        <p>＊用餐限九十分鐘請勿飲酒</p>
-                        <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
-                    </div>
-                </footer>
+            <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
+                <div className="border-t border-slate-200 pt-8 space-y-2">
+                    <p>＊店內最低消費為一份餐點</p>
+                    <p>＊不收服務費，用完餐請回收餐具</p>
+                    <p>＊用餐限九十分鐘請勿飲酒</p>
+                    <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                </div>
+            </footer>
 
+            <button
+                onClick={() => setIsAIAssistantOpen(true)}
+                className="fixed bottom-6 left-6 lg:bottom-10 lg:left-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
+                aria-label="開啟 AI 小幫手"
+            >
+                <SparklesIcon className="h-8 w-8" />
+            </button>
+
+            {cartItemCount > 0 && (
                 <button
-                    onClick={() => setIsAIAssistantOpen(true)}
-                    className="fixed bottom-6 left-6 lg:bottom-10 lg:left-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
-                    aria-label="開啟 AI 小幫手"
+                    onClick={() => setIsCartOpen(true)}
+                    className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
+                    aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
                 >
-                    <SparklesIcon className="h-8 w-8" />
+                    <CartIcon className="h-8 w-8" />
+                    <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
                 </button>
+            )}
 
-                {cartItemCount > 0 && (
-                    <button
-                        onClick={() => setIsCartOpen(true)}
-                        className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
-                        aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
-                    >
-                        <CartIcon className="h-8 w-8" />
-                        <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
-                    </button>
-                )}
+            <Cart
+                isOpen={isCartOpen}
+                onClose={() => setIsCartOpen(false)}
+                cartItems={cart}
+                onUpdateQuantity={handleUpdateQuantity}
+                onRemoveItem={handleRemoveFromCart}
+                onEditItem={handleEditItem}
+                onSubmitOrder={handleSubmitOrder}
+            />
 
-                <Cart
-                    isOpen={isCartOpen}
-                    onClose={() => setIsCartOpen(false)}
-                    cartItems={cart}
-                    onUpdateQuantity={handleUpdateQuantity}
-                    onRemoveItem={handleRemoveFromCart}
-                    onEditItem={handleEditItem}
-                    onSubmitOrder={handleSubmitOrder}
-                />
-
-                {selectedItem && (
-                    <ItemModal
-                        selectedItem={selectedItem}
-                        editingItem={editingCartItem}
-                        addons={addons}
-                        onClose={handleCloseModal}
-                        onConfirmSelection={handleConfirmSelection}
-                    />
-                )}
-                
-                <OrderQueryModal
-                    isOpen={isQueryModalOpen}
-                    onClose={() => setIsQueryModalOpen(false)}
-                />
-                
-                <AdminDashboard 
-                    isOpen={isAdminDashboardOpen}
-                    onClose={() => setIsAdminDashboardOpen(false)}
-                    onPrintRequest={handlePrintRequest}
-                />
-
-                <AIAssistantModal
-                    isOpen={isAIAssistantOpen}
-                    onClose={() => setIsAIAssistantOpen(false)}
-                    menuData={menuData}
+            {selectedItem && (
+                <ItemModal
+                    selectedItem={selectedItem}
+                    editingItem={editingCartItem}
                     addons={addons}
+                    onClose={handleCloseModal}
+                    onConfirmSelection={handleConfirmSelection}
                 />
+            )}
+            
+            <OrderQueryModal
+                isOpen={isQueryModalOpen}
+                onClose={() => setIsQueryModalOpen(false)}
+            />
+            
+            <AdminDashboard 
+                isOpen={isAdminDashboardOpen}
+                onClose={() => setIsAdminDashboardOpen(false)}
+            />
 
-                <ConfirmationModal
-                    isOpen={!!confirmationData}
-                    orderId={confirmationData?.orderId ?? null}
-                    lastSuccessfulOrder={confirmationData?.orderData ?? null}
-                    onClose={handleCloseConfirmation}
-                    onPrintRequest={handlePrintRequest}
-                />
-            </div>
-        </>
+            <AIAssistantModal
+                isOpen={isAIAssistantOpen}
+                onClose={() => setIsAIAssistantOpen(false)}
+                menuData={menuData}
+                addons={addons}
+            />
+
+            <ConfirmationModal
+                isOpen={!!confirmationData}
+                orderId={confirmationData?.orderId ?? null}
+                lastSuccessfulOrder={confirmationData?.orderData ?? null}
+                onClose={handleCloseConfirmation}
+            />
+        </div>
     );
 };
 
