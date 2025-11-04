@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import type { MenuCategory, Addon } from '../types';
 import { CloseIcon, SendIcon, SparklesIcon } from './icons';
@@ -36,8 +36,17 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const aiRef = useRef<GoogleGenAI | null>(null);
+    const [isAiDisabled, setIsAiDisabled] = useState(false);
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    useEffect(() => {
+        // On mount when the modal is first opened, check if AI can be used.
+        // This determines the initial UI state without trying to initialize the SDK.
+        if (isOpen && !process.env.API_KEY) {
+            setIsAiDisabled(true);
+        }
+    }, [isOpen]);
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,8 +56,32 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
         scrollToBottom();
     }, [messages, isLoading]);
     
-    // Create a memoized context string to avoid re-calculating on every render
-    const menuContext = useMemo(() => {
+    // Defer AI SDK initialization until it's actually needed.
+    // This is the key fix to prevent startup crashes.
+    const getAiInstance = (): GoogleGenAI | null => {
+        if (aiRef.current) return aiRef.current;
+        if (isAiDisabled) return null;
+
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+            console.warn("Google GenAI API Key is not configured. AI Assistant will be disabled.");
+            setIsAiDisabled(true);
+            return null;
+        }
+
+        try {
+            const instance = new GoogleGenAI({ apiKey });
+            aiRef.current = instance;
+            return instance;
+        } catch (e) {
+            console.error("Failed to initialize GoogleGenAI:", e);
+            setError("AI 小幫手初始化失敗。");
+            setIsAiDisabled(true);
+            return null;
+        }
+    };
+    
+    const menuContext = React.useMemo(() => {
         const simplifiedMenu = menuData.map(category => ({
             ...category,
             items: category.items.map(({ id, name, weight, price, isAvailable }) => ({ id, name, weight, price, isAvailable }))
@@ -60,13 +93,23 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
     const handleSendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmedInput = userInput.trim();
-        if (!trimmedInput || isLoading) return;
+        if (!trimmedInput || isLoading || isAiDisabled) return;
 
         setError(null);
         const newUserMessage: Message = { role: 'user', content: trimmedInput };
         setMessages(prev => [...prev, newUserMessage]);
         setUserInput('');
         setIsLoading(true);
+        
+        const ai = getAiInstance();
+
+        if (!ai) {
+            const errorMessage = "AI 小幫手目前無法使用，請確認 API 金鑰是否已正確設定。";
+            setError(errorMessage);
+            setMessages(prev => [...prev, { role: 'model', content: errorMessage }]);
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const response = await ai.models.generateContent({
@@ -87,7 +130,7 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
         } finally {
             setIsLoading(false);
         }
-    }, [userInput, isLoading, menuContext, ai.models]);
+    }, [userInput, isLoading, menuContext, isAiDisabled]);
     
     if (!isOpen) return null;
 
@@ -131,11 +174,11 @@ const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onClose, me
                             type="text"
                             value={userInput}
                             onChange={(e) => setUserInput(e.target.value)}
-                            placeholder="問我任何關於菜單的問題..."
-                            className="flex-grow p-3 border border-slate-300 rounded-full focus:ring-2 focus:ring-blue-500 outline-none"
-                            disabled={isLoading}
+                            placeholder={isAiDisabled ? "AI 小幫手目前無法使用" : "問我任何關於菜單的問題..."}
+                            className="flex-grow p-3 border border-slate-300 rounded-full focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100"
+                            disabled={isLoading || isAiDisabled}
                         />
-                        <button type="submit" disabled={isLoading || !userInput.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors">
+                        <button type="submit" disabled={isLoading || !userInput.trim() || isAiDisabled} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors">
                             <SendIcon className="h-6 w-6" />
                         </button>
                     </form>
