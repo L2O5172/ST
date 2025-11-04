@@ -1,0 +1,319 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { MenuItem, MenuCategory, Addon, CartItem, OrderData } from './types';
+import { apiService } from './services/apiService';
+import { MENU_DATA, ADDONS } from './constants';
+import Menu from './components/Menu';
+import ItemModal from './components/ItemModal';
+import Cart from './components/Cart';
+import OrderQueryModal from './components/OrderQueryModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import AIAssistantModal from './components/AIAssistantModal';
+import ConfirmationModal from './components/ConfirmationModal';
+import { CartIcon, RefreshIcon, SearchIcon, SparklesIcon } from './components/icons';
+
+const App: React.FC = () => {
+    const [cart, setCart] = useState<CartItem[]>([]);
+    const [isCartOpen, setIsCartOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<{ item: MenuItem, category: MenuCategory } | null>(null);
+    const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
+    const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
+    const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+    const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+    const [isEditingFromCart, setIsEditingFromCart] = useState(false);
+    const [confirmationData, setConfirmationData] = useState<{ orderId: string; orderData: OrderData } | null>(null);
+
+
+    const [menuData, setMenuData] = useState<MenuCategory[]>([]);
+    const [addons, setAddons] = useState<Addon[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [notification, setNotification] = useState<string | null>(null);
+
+    const fetchData = useCallback(async () => {
+        setNotification(null);
+        const { menu, addons, from } = await apiService.getMenuAndAddons();
+
+        if (from === 'api' && (!menu || menu.length === 0 || menu.every(cat => cat.items.length === 0))) {
+            setMenuData(MENU_DATA);
+            setAddons(ADDONS);
+            setNotification('成功連接伺服器，但菜單是空的。請檢查後台 Google Sheet 是否已填入資料，或執行「一鍵設定工作表」。');
+        } else {
+            setMenuData(menu);
+            setAddons(addons);
+            if (from === 'fallback') {
+                setNotification('無法連接伺服器，目前顯示的是離線菜單。');
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        const initialLoad = async () => {
+            setLoading(true);
+            await fetchData();
+            setLoading(false);
+        };
+        initialLoad();
+    }, [fetchData]);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await fetchData();
+        setIsRefreshing(false);
+    };
+
+    const handleSelectItem = (item: MenuItem, category: MenuCategory) => {
+        if (!item.isAvailable) return;
+        setSelectedItem({ item, category });
+    };
+
+    const handleCloseModal = () => {
+        setSelectedItem(null);
+        setEditingCartItem(null);
+        setIsEditingFromCart(false); 
+    };
+    
+    const handleEditItem = (cartId: string) => {
+        const itemToEdit = cart.find(i => i.cartId === cartId);
+        if(itemToEdit) {
+            const category = menuData.find(c => c.title === itemToEdit.categoryTitle) || { title: itemToEdit.categoryTitle, items: [] };
+            setIsEditingFromCart(true);
+            setEditingCartItem(itemToEdit);
+            setSelectedItem({ item: itemToEdit.item, category });
+        }
+    };
+
+    const createCartItemObject = (item: MenuItem, quantity: number, options: any, category: MenuCategory): Omit<CartItem, 'cartId'> => {
+        const { donenesses, drinks, addons, notes, sauces, desserts, singleChoiceAddon, multiChoice } = options;
+        
+        const generateStableObjectString = (obj: object) => {
+            if (!obj || Object.keys(obj).length === 0) return '';
+            return JSON.stringify(Object.fromEntries(Object.entries(obj).filter(([, val]) => val && Number(val) > 0).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))));
+        };
+        
+        const singleChoicePrice = singleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+        const totalAddonPrice = (addons || []).reduce((sum: number, addon: { price: number; quantity: number; }) => sum + (addon.price * addon.quantity), 0);
+        const totalPrice = (item.price + singleChoicePrice) * quantity + totalAddonPrice;
+
+        const cartKeyFields = {
+            id: item.id,
+            donenesses: generateStableObjectString(donenesses),
+            drinks: generateStableObjectString(drinks),
+            multiChoice: generateStableObjectString(multiChoice),
+            notes: notes,
+            addons: (addons || []).map((a: { id: string; quantity: any; }) => `${a.id}:${a.quantity}`).sort().join(','),
+            sauces: (sauces || []).map((s: { name: string; quantity: any; }) => `${s.name}:${s.quantity}`).sort().join(','),
+            desserts: (desserts || []).map((d: { name: string; quantity: any; }) => `${d.name}:${d.quantity}`).sort().join(','),
+            singleChoiceAddon: singleChoiceAddon || 'none',
+        };
+        const cartKey = JSON.stringify(cartKeyFields);
+
+        return {
+            cartKey,
+            item,
+            quantity,
+            categoryTitle: category.title,
+            selectedDonenesses: donenesses,
+            selectedDrinks: drinks,
+            selectedAddons: addons || [],
+            selectedSauces: sauces || [],
+            selectedDesserts: desserts || [],
+            selectedNotes: notes,
+            selectedSingleChoiceAddon: singleChoiceAddon,
+            selectedMultiChoice: multiChoice,
+            totalPrice,
+        };
+    };
+    
+    const handleConfirmSelection = (item: MenuItem, quantity: number, options: any, category: MenuCategory) => {
+        const newOrUpdatedCartItem = createCartItemObject(item, quantity, options, category);
+
+        if (editingCartItem && cart.some(i => i.cartId === editingCartItem.cartId)) {
+            setCart(prevCart => prevCart.map(cartItem =>
+                cartItem.cartId === editingCartItem.cartId
+                    ? { ...newOrUpdatedCartItem, cartId: editingCartItem.cartId }
+                    : cartItem
+            ));
+        } else {
+            setCart(prevCart => {
+                const existingItemIndex = prevCart.findIndex(cartItem => cartItem.cartKey === newOrUpdatedCartItem.cartKey);
+                if (existingItemIndex > -1) {
+                    const updatedCart = [...prevCart];
+                    const existingItem = updatedCart[existingItemIndex];
+                    const newQuantity = existingItem.quantity + quantity;
+
+                    const singleChoicePrice = existingItem.selectedSingleChoiceAddon && item.customizations.singleChoiceAddon ? item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (existingItem.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+
+                    updatedCart[existingItemIndex] = { ...existingItem, quantity: newQuantity, totalPrice: newTotalPrice };
+                    return updatedCart;
+                } else {
+                    const finalCartItem = { ...newOrUpdatedCartItem, cartId: `${newOrUpdatedCartItem.cartKey}-${Date.now()}` };
+                    return [...prevCart, finalCartItem];
+                }
+            });
+        }
+
+        if (isEditingFromCart) {
+            setIsCartOpen(true);
+        }
+    };
+    
+    const handleUpdateQuantity = (cartId: string, newQuantity: number) => {
+        setCart(prevCart => {
+            if (newQuantity <= 0) {
+                return prevCart.filter(item => item.cartId !== cartId);
+            }
+            return prevCart.map(item => {
+                if (item.cartId === cartId) {
+                    const singleChoicePrice = item.selectedSingleChoiceAddon && item.item.customizations.singleChoiceAddon ? item.item.customizations.singleChoiceAddon.price : 0;
+                    const totalAddonPrice = (item.selectedAddons || []).reduce((sum, addon) => sum + (addon.price * addon.quantity), 0);
+                    const newTotalPrice = (item.item.price + singleChoicePrice) * newQuantity + totalAddonPrice;
+                    return { ...item, quantity: newQuantity, totalPrice: newTotalPrice };
+                }
+                return item;
+            });
+        });
+    };
+
+    const handleRemoveFromCart = (cartId: string) => {
+        setCart(prevCart => prevCart.filter(item => item.cartId !== cartId));
+    };
+
+    const handleSubmitOrder = async (orderData: OrderData) => {
+        const result = await apiService.submitOrder(orderData);
+        if (result.success && result.orderId) {
+            setCart([]);
+            setIsCartOpen(false);
+            setConfirmationData({ orderId: result.orderId, orderData });
+
+            const savedOrders = JSON.parse(localStorage.getItem('steakhouse-orders') || '[]');
+            if (!savedOrders.includes(result.orderId)) {
+                savedOrders.unshift(result.orderId);
+                localStorage.setItem('steakhouse-orders', JSON.stringify(savedOrders.slice(0, 10)));
+            }
+        }
+        return result;
+    };
+    
+    const cartItemCount = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
+
+    const handleCloseConfirmation = () => {
+        setConfirmationData(null);
+    }
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col justify-center items-center bg-slate-100">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-700"></div>
+                <p className="mt-4 text-slate-600 text-lg">正在載入菜單...</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-slate-100 text-slate-800">
+             {notification && (
+                <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 text-center" role="alert">
+                    <p className="font-bold">{notification}</p>
+                </div>
+            )}
+            <header className="bg-white shadow-md sticky top-0 z-20">
+                <div className="container mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-green-800 tracking-wider">無名牛排點餐系統</h1>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setIsAdminDashboardOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                            <span>管理後台</span>
+                        </button>
+                        <button onClick={() => setIsQueryModalOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium">
+                            <SearchIcon className="h-4 w-4"/>
+                            <span>查詢訂單</span>
+                        </button>
+                        <button onClick={handleRefresh} disabled={isRefreshing} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium disabled:opacity-50">
+                            <RefreshIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}/>
+                            <span>{isRefreshing ? '刷新中' : '刷新'}</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main className="container mx-auto p-4 md:p-6 lg:p-8">
+                <Menu menuData={menuData} onSelectItem={handleSelectItem} />
+            </main>
+
+            <footer className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500 text-sm">
+                <div className="border-t border-slate-200 pt-8 space-y-2">
+                    <p>＊店內最低消費為一份餐點</p>
+                    <p>＊不收服務費，用完餐請回收餐具</p>
+                    <p>＊用餐限九十分鐘請勿飲酒</p>
+                    <p>＊餐點內容以現場出餐為準，餐點現點現做請耐心等候</p>
+                </div>
+            </footer>
+
+            <button
+                onClick={() => setIsAIAssistantOpen(true)}
+                className="fixed bottom-6 left-6 lg:bottom-10 lg:left-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50 h-16 w-16"
+                aria-label="開啟 AI 小幫手"
+            >
+                <SparklesIcon className="h-8 w-8" />
+            </button>
+
+            {cartItemCount > 0 && (
+                <button
+                    onClick={() => setIsCartOpen(true)}
+                    className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 flex items-center justify-center bg-green-700 text-white rounded-full shadow-lg hover:bg-green-800 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 h-16 w-16"
+                    aria-label={`查看購物車，共有 ${cartItemCount} 項商品`}
+                >
+                    <CartIcon className="h-8 w-8" />
+                    <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold">{cartItemCount}</span>
+                </button>
+            )}
+
+            <Cart
+                isOpen={isCartOpen}
+                onClose={() => setIsCartOpen(false)}
+                cartItems={cart}
+                onUpdateQuantity={handleUpdateQuantity}
+                onRemoveItem={handleRemoveFromCart}
+                onEditItem={handleEditItem}
+                onSubmitOrder={handleSubmitOrder}
+            />
+
+            {selectedItem && (
+                <ItemModal
+                    selectedItem={selectedItem}
+                    editingItem={editingCartItem}
+                    addons={addons}
+                    onClose={handleCloseModal}
+                    onConfirmSelection={handleConfirmSelection}
+                />
+            )}
+            
+            <OrderQueryModal
+                isOpen={isQueryModalOpen}
+                onClose={() => setIsQueryModalOpen(false)}
+            />
+            
+            <AdminDashboard 
+                isOpen={isAdminDashboardOpen}
+                onClose={() => setIsAdminDashboardOpen(false)}
+            />
+
+            <AIAssistantModal
+                isOpen={isAIAssistantOpen}
+                onClose={() => setIsAIAssistantOpen(false)}
+                menuData={menuData}
+                addons={addons}
+            />
+
+            <ConfirmationModal
+                isOpen={!!confirmationData}
+                orderId={confirmationData?.orderId ?? null}
+                lastSuccessfulOrder={confirmationData?.orderData ?? null}
+                onClose={handleCloseConfirmation}
+            />
+        </div>
+    );
+};
+
+export default App;
